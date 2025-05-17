@@ -71,7 +71,7 @@ def qwen2_5vl_vision_xformers_forward(
         return attn_output
 
 def monkey_patch_qwen2_5vl_flash_attn():
-    Qwen2_5_VLVisionFlashAttention2.forward =qwen2_5vl_vision_xformers_forward
+    Qwen2_5_VLVisionFlashAttention2.forward = qwen2_5vl_vision_xformers_forward
 
 # ----------------------- Fix the process pending bug when using data mixture of image-text data and pure-text under deepseed zero3-----------------------
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLCausalLMOutputWithPast

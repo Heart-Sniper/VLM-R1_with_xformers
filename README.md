@@ -61,6 +61,6 @@ def qwen2_5vl_vision_xformers_forward(
         return attn_output
 
 def monkey_patch_qwen2_5vl_flash_attn():
-    Qwen2_5_VLVisionFlashAttention2.forward =qwen2_5vl_vision_xformers_forward
+    Qwen2_5_VLVisionFlashAttention2.forward = qwen2_5vl_vision_xformers_forward
 ```
 
