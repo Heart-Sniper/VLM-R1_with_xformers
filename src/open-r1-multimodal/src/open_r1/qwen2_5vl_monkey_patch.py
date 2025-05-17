@@ -1,8 +1,10 @@
 
 # ----------------------- Fix the flash attention bug in the current version of transformers -----------------------
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionFlashAttention2, apply_rotary_pos_emb_flashatt, flash_attn_varlen_func
+import xformers.ops as xops
 import torch
 from typing import Tuple, Optional
+
 def qwen2_5vl_vision_flash_attn_forward(
         self,
         hidden_states: torch.Tensor,
@@ -39,10 +41,37 @@ def qwen2_5vl_vision_flash_attn_forward(
         attn_output = self.proj(attn_output)
         return attn_output
 
+def qwen2_5vl_vision_xformers_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        
+        if position_embeddings is None:
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos().float()
+            sin = emb.sin().float()
+        else:
+            cos, sin = position_embeddings
+            cos = cos.to(torch.float)
+            sin = sin.to(torch.float())
+        
+        q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
+        q = q.squeeze(0)
+        k = k.squeeze(0)
+
+        # Use xformers memory-efficient attention
+        attn_output = xops.memory_efficient_attention(q, k, v)
+        
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 def monkey_patch_qwen2_5vl_flash_attn():
-    Qwen2_5_VLVisionFlashAttention2.forward = qwen2_5vl_vision_flash_attn_forward
-
+    Qwen2_5_VLVisionFlashAttention2.forward =qwen2_5vl_vision_xformers_forward
 
 # ----------------------- Fix the process pending bug when using data mixture of image-text data and pure-text under deepseed zero3-----------------------
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLCausalLMOutputWithPast
